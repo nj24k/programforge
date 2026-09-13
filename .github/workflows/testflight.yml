@@ -88,7 +88,7 @@ jobs:
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             CODE_SIGN_STYLE=Automatic \
             CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
-            archive | xcpretty
+            archive
 
       - name: Export and upload to App Store Connect
         run: |
@@ -101,4 +101,4 @@ jobs:
             -allowProvisioningUpdates \
             -authenticationKeyPath "$APP_STORE_CONNECT_API_KEY_PATH" \
             -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" \
-            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" | xcpretty
+            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID"
