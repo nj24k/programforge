@@ -13,7 +13,7 @@ concurrency:
 jobs:
   archive-and-upload:
     name: Sign and upload to TestFlight
-    runs-on: macos-26
+    runs-on: macos-latest
     timeout-minutes: 40
     env:
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
