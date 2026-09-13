@@ -59,18 +59,12 @@ final class TrainingStore: ObservableObject {
 
     private func persist() {
         let snap = Snapshot(
-            trainingMaxes: trainingMaxes.mapValues { $0 },
+            trainingMaxes: Dictionary(uniqueKeysWithValues: trainingMaxes.map { ($0.key.rawValue, $0.value) }),
             loggedSets: loggedSets,
             prs: prs
         )
-        // Map Lift keys to raw strings for Codable
-        let wrapped = Snapshot(
-            trainingMaxes: snap.trainingMaxes,
-            loggedSets: snap.loggedSets,
-            prs: snap.prs
-        )
-        if let data = try? JSONEncoder().encode(wrapped) {
-            try? data.write(to: fileURL, options: .atomic)
+        if let data = try? JSONEncoder().encode(snap) {
+            try? data.write(to: fileURL, options: Data.WritingOptions.atomic)
         }
     }
 
