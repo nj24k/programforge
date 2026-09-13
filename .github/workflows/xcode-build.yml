@@ -1,0 +1,81 @@
+name: ProgramForge Cloud Xcode
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore:
+      - README.md
+  pull_request:
+    paths-ignore:
+      - README.md
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloud-xcode-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ProgramForge / newest stable Xcode
+    runs-on: macos-26
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Select newest stable Xcode
+        shell: bash
+        run: |
+          XCODE_APP="$(ruby -e 'apps = Dir["/Applications/Xcode_*.app"].select { |path| File.basename(path).match?(/\AXcode_\d+(?:\.\d+)*\.app\z/) }; abort "No stable versioned Xcode app found" if apps.empty?; puts apps.max_by { |path| File.basename(path).scan(/\d+/).map(&:to_i) }')"
+          echo "DEVELOPER_DIR=$XCODE_APP/Contents/Developer" >> "$GITHUB_ENV"
+
+      - name: Show Apple toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          xcodebuild -showsdks
+
+      - name: Install project generator
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate --spec "project.yml"
+
+      - name: Compile app and tests
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project "ProgramForge.xcodeproj" \
+            -scheme "ProgramForge" \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            build-for-testing | xcpretty
+
+      - name: Run Swift package tests
+        if: ${{ hashFiles('Package.swift') != '' }}
+        run: swift test --parallel
+
+      - name: Locate compiled simulator app
+        shell: bash
+        run: |
+          shopt -s nullglob
+          APP_CANDIDATES=(build/Build/Products/Debug-iphonesimulator/*.app)
+          test "${#APP_CANDIDATES[@]}" -ge 1
+          APP_PATH="${APP_CANDIDATES[0]}"
+          test -f "$APP_PATH/Info.plist"
+          echo "APP_PATH=$APP_PATH" >> "$GITHUB_ENV"
+
+      - name: Upload compiled simulator app
+        uses: actions/upload-artifact@v7
+        with:
+          name: programforge-simulator
+          path: ${{ env.APP_PATH }}
+          if-no-files-found: error
+          retention-days: 7

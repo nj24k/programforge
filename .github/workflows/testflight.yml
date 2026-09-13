@@ -1,0 +1,100 @@
+name: ProgramForge TestFlight
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: programforge-testflight
+  cancel-in-progress: false
+
+jobs:
+  archive-and-upload:
+    name: Sign and upload to TestFlight
+    runs-on: macos-26
+    timeout-minutes: 40
+    env:
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64 }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Select newest stable Xcode
+        shell: bash
+        run: |
+          XCODE_APP="$(ruby -e 'apps = Dir["/Applications/Xcode_*.app"].select { |path| File.basename(path).match?(/\AXcode_\d+(?:\.\d+)*\.app\z/) }; abort "No stable versioned Xcode app found" if apps.empty?; puts apps.max_by { |path| File.basename(path).scan(/\d+/).map(&:to_i) }')"
+          echo "DEVELOPER_DIR=$XCODE_APP/Contents/Developer" >> "$GITHUB_ENV"
+
+      - name: Show Apple toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          xcodebuild -showsdks
+
+      - name: Validate signing configuration
+        run: |
+          test -n "$APPLE_TEAM_ID"
+          test -n "$APP_STORE_CONNECT_API_KEY_ID"
+          test -n "$APP_STORE_CONNECT_ISSUER_ID"
+          test -n "$APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64"
+
+      - name: Install project generator
+        run: brew install xcodegen
+
+      - name: Prepare App Store Connect authentication
+        shell: bash
+        run: |
+          KEY_DIRECTORY="$RUNNER_TEMP/private_keys"
+          KEY_PATH="$KEY_DIRECTORY/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
+          mkdir -p "$KEY_DIRECTORY"
+          printf '%s' "$APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64" | base64 --decode > "$KEY_PATH"
+          chmod 600 "$KEY_PATH"
+          echo "APP_STORE_CONNECT_API_KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
+
+      - name: Generate Xcode project
+        run: xcodegen generate --spec "project.yml"
+
+      - name: Prepare export options
+        shell: bash
+        run: |
+          EXPORT_OPTIONS="$RUNNER_TEMP/ExportOptions-AppStore.plist"
+          cp Configuration/ExportOptions-AppStore.plist "$EXPORT_OPTIONS"
+          /usr/libexec/PlistBuddy -c "Add :teamID string $APPLE_TEAM_ID" "$EXPORT_OPTIONS"
+          echo "EXPORT_OPTIONS_PATH=$EXPORT_OPTIONS" >> "$GITHUB_ENV"
+
+      - name: Archive signed app
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project "ProgramForge.xcodeproj" \
+            -scheme "ProgramForge" \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "build/ProgramForge.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$APP_STORE_CONNECT_API_KEY_PATH" \
+            -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" \
+            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CODE_SIGN_STYLE=Automatic \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            archive | xcpretty
+
+      - name: Export and upload to App Store Connect
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -exportArchive \
+            -archivePath "build/ProgramForge.xcarchive" \
+            -exportPath build/TestFlight \
+            -exportOptionsPlist "$EXPORT_OPTIONS_PATH" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$APP_STORE_CONNECT_API_KEY_PATH" \
+            -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" \
+            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" | xcpretty

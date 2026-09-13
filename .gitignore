@@ -1,0 +1,22 @@
+# XcodeGen output — generated project is not committed
+*.xcodeproj
+
+# macOS
+.DS_Store
+
+# Xcode
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
+
+# Secrets — never commit
+*.p8
+*.pem
+*.mobileprovision
+*.cer
+AuthKey*
+
+# SwiftPM (none expected, but just in case)
+.build/
+Package.resolved
