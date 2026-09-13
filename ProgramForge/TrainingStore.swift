@@ -88,7 +88,7 @@ final class TrainingStore: ObservableObject {
 
     func currentE1rm(for lift: Lift) -> Double? {
         let sets = loggedSets.filter { $0.lift == lift }
-        guard let best = sets.map({ ({ OneRepMax.epley(weight: $0.weight, reps: $0.completedReps) })() }).max() else { return nil }
+        guard let best = sets.map({ OneRepMax.epley(weight: $0.weight, reps: $0.completedReps) }).max() else { return nil }
         return best
     }
 
