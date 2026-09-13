@@ -10,7 +10,7 @@ final class AppState: ObservableObject {
         didSet { UserDefaults.standard.set(cycleWeek, forKey: "pf.week") }
     }
     @Published var activeDayIndex: Int = 0
-    @Published var showOnboarding: Bool
+    @Published var showOnboarding: Bool = false
 
     let store = TrainingStore.shared
 
